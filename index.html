@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Keiheuvel Area</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:#000;color:#e5e5e5;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+[hidden]{display:none!important}
+button{font:600 16px system-ui,sans-serif;padding:12px 10px;border-radius:10px;border:1px solid #3f3f46;background:#18181b;color:#fff;min-height:50px;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid #4ade80;outline-offset:2px}
+button.go{background:#14532d;border-color:#22c55e}
+button.warn{background:#7f1d1d;border-color:#ef4444}
+.page{max-width:640px;margin:0 auto;padding:12px 16px 40px}
+h1{font-size:22px;margin:8px 0 4px}
+h2{font-size:17px;margin:20px 0 4px;color:#fff}
+.sub{color:#a1a1aa;font-size:14px;margin:0 0 8px}
+label.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #27272a;font-size:15px}
+label.row small{display:block;color:#a1a1aa;font-size:12px;margin-top:2px}
+input[type=number]{width:110px;font:600 20px system-ui,sans-serif;padding:8px;border-radius:8px;border:1px solid #3f3f46;background:#09090b;color:#fff;text-align:right}
+input[type=number].empty{border-color:#f59e0b}
+input[type=checkbox]{width:26px;height:26px}
+.err{color:#f87171;font-size:14px;min-height:20px;margin:8px 0}
+.btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}
+.gps{font-size:14px;padding:8px 10px;border-radius:8px;background:#18181b;margin:8px 0}
+.chk{display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:18px;margin:12px 0}
+.chk div:nth-child(odd){color:#a1a1aa}
+.chk div:nth-child(even){font-weight:700;text-align:right}
+.note{font-size:14px;color:#fbbf24;margin:8px 0}
+.flybar{position:sticky;top:0;z-index:2;padding:10px 12px;font-weight:700;font-size:16px;border-radius:0 0 10px 10px}
+#vFly{display:flex;flex-direction:column;height:100vh;height:100dvh}
+#st{padding:10px 12px;font-weight:800;font-size:20px;text-align:center;min-height:48px}
+#main{flex:1;display:flex;flex-direction:column;min-height:0}
+#mapBox{flex:1;position:relative;min-height:0}
+#map{position:absolute;inset:0;width:100%;height:100%}
+#side{display:flex;flex-direction:column}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:4px}
+.tile{background:#18181b;border-radius:8px;padding:6px 8px;min-width:0}
+.tile span{display:block;font-size:11px;color:#a1a1aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile b{display:block;font-size:20px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#prof{width:100%;height:96px;display:block}
+.fbar{display:grid;grid-template-columns:1.4fr .6fr .6fr 1.3fr 1fr;gap:6px;padding:6px}
+.fbar button{min-height:48px;padding:8px 4px;font-size:15px}
+@media (orientation:landscape){
+  #main{flex-direction:row}
+  #side{width:40%;max-width:360px}
+  .tiles{grid-template-columns:1fr 1fr}
+  #prof{flex:1;height:auto;min-height:80px}
+  .tile b{font-size:30px}
+}
+#btnFly{position:sticky;bottom:0;background:#000;padding:8px 0 calc(8px + env(safe-area-inset-bottom,0px));z-index:2}
+</style>
+</head>
+<body>
+
+<!-- ============ instellingen ============ -->
+<section id="vSet" class="page">
+  <div id="setFly" class="flybar" hidden></div>
+  <h1 id="setTitle">Keiheuvel Area</h1>
+  <p class="sub" id="setSub">Vul de gegevens van vandaag in voor je vertrekt.</p>
+  <div class="gps" id="gpsS">GPS: wachten op toestemming</div>
+
+  <h2>Vandaag (briefing)</h2>
+  <p class="sub">Deze velden zijn elke dag leeg tot je ze invult.</p>
+  <label class="row"><span>Wind uit (°)<small>Voorspelde wind, richting waar hij vandaan komt</small></span><input type="number" id="s_wd" inputmode="numeric" min="0" max="360" step="5"></label>
+  <label class="row">Windsnelheid (kt)<input type="number" id="s_ws" inputmode="numeric" min="0" max="40" step="1"></label>
+  <label class="row"><span>Max. hoogte Brogel (m)<small>Boven het veld, zoals op de briefing</small></span><input type="number" id="s_mx" inputmode="numeric" min="100" max="2000" step="5"></label>
+
+  <h2>Toestel</h2>
+  <label class="row"><span>Glijgetal<small>Rekenwaarde, met veiligheid ingebouwd</small></span><input type="number" id="s_ld" inputmode="numeric" min="5" max="60" step="1"></label>
+  <label class="row"><span>Glijsnelheid (km/h)<small>Snelheid waarmee je naar het veld vliegt</small></span><input type="number" id="s_va" inputmode="numeric" min="60" max="160" step="5"></label>
+
+  <h2>Veld</h2>
+  <label class="row"><span>Aankomsthoogte (m)<small>Hoogte boven het veld bij aankomst</small></span><input type="number" id="s_ar" inputmode="numeric" min="50" max="400" step="10"></label>
+
+  <h2>Veiligheidsmarges</h2>
+  <p class="sub">Binnen deze marge wordt het scherm oranje. Op de grens zelf volgt het alarm.</p>
+  <label class="row">Onder de hoogtegrens (m)<input type="number" id="s_vm" inputmode="numeric" min="0" max="500" step="10"></label>
+  <label class="row">Tot de zijgrens (m)<input type="number" id="s_hm" inputmode="numeric" min="0" max="3000" step="50"></label>
+  <label class="row">Boven de kegel (m)<input type="number" id="s_cm" inputmode="numeric" min="0" max="300" step="5"></label>
+
+  <h2>Opties</h2>
+  <label class="row"><span>Geluid bij waarschuwing en alarm</span><input type="checkbox" id="s_snd"></label>
+
+  <p class="err" id="setErr"></p>
+  <div class="btns" id="btnPre">
+    <button id="bNext" class="go">Verder naar controle</button>
+    <button id="bDemo">Demo: vlucht 14 april</button>
+  </div>
+  <div class="btns" id="btnFly" hidden>
+    <button id="bSaveFly" class="go">Bewaren en terug naar kaart</button>
+    <button id="bCancelFly">Annuleren</button>
+    <button id="bZero">Hoogte hier op 0 zetten</button>
+  </div>
+  <div id="lastLog"></div>
+  <p class="sub" style="margin-top:24px">Versie 1 · testversie, niet gecertificeerd</p>
+</section>
+
+<!-- ============ controle ============ -->
+<section id="vChk" class="page" hidden>
+  <h1>Controle voor de start</h1>
+  <p class="sub">Kijk alles na. Klopt iets niet, ga dan terug.</p>
+  <div class="chk" id="chkList"></div>
+  <p class="note" id="chkNote"></p>
+  <div class="btns">
+    <button id="bStart" class="go">Alles klopt: start vlucht</button>
+    <button id="bBack">Terug naar instellingen</button>
+  </div>
+</section>
+
+<!-- ============ vlucht ============ -->
+<section id="vFly" hidden>
+  <div id="st">--</div>
+  <div id="main">
+    <div id="mapBox"><canvas id="map" aria-label="Bewegende kaart"></canvas></div>
+    <div id="side">
+      <div class="tiles">
+        <div class="tile"><span>Hoogte</span><b id="tH">--</b></div>
+        <div class="tile"><span>Kegel-reserve</span><b id="tR">--</b></div>
+        <div class="tile"><span>Tot grens</span><b id="tB">--</b></div>
+        <div class="tile"><span id="tDl">Veld</span><b id="tD">--</b></div>
+      </div>
+      <canvas id="prof" aria-label="Zijaanzicht naar het veld"></canvas>
+    </div>
+  </div>
+  <div class="fbar">
+    <button id="bOri">Koers boven</button>
+    <button id="bZm" aria-label="Uitzoomen">−</button>
+    <button id="bZp" aria-label="Inzoomen">+</button>
+    <button id="bSet">Instellingen</button>
+    <button id="bStop" class="warn">Stop</button>
+  </div>
+</section>
+
+<script>
+'use strict';
+/* ---------- vaste gegevens ---------- */
+const VERSION = 1;
+const F = [51.180833, 5.220833];                 // EBKH ARP (AIP)
+const KX = 111.32 * Math.cos(F[0] * Math.PI / 180), KY = 111.13;
+const LL = [[51.187333, 5.137778], [51.141333, 5.224444], [51.19, 5.316667], [51.261944, 5.316667], [51.263333, 5.28]];
+const P = LL.map(p => [(p[1] - F[1]) * KX, (p[0] - F[0]) * KY]);
+const HARD = [true, true, true, true, false];
+const LBL = ['TMA', 'TMA', 'TMA', 'NL-grens', 'vrij, geen TMA'];
+const RWY = 0.69, RHD = 67 * Math.PI / 180;
+const ALT_FALLBACK = 82;                         // 37 m veldhoogte + 45 m geoïde (AIP: 148 ft)
+const ZL = [2, 4, 8, 16, 25];
+const DAILY = ['wd', 'ws', 'mx'];
+const KEYS = ['wd', 'ws', 'mx', 'ld', 'va', 'ar', 'vm', 'hm', 'cm'];
+const DEF = { ld: 25, va: 90, ar: 250, vm: 100, hm: 500, cm: 75, snd: true };
+const TR = [[0,49,17,0],[5,37,12,43],[11,24,6,120],[17,10,1,192],[25,-9,-5,258],[30,-19,-8,287],[35,-31,-13,314],[40,-44,-17,297],[45,-55,-21,297],[49,-59,-25,298],[53,-64,-32,296],[60,-72,-48,297],[65,-77,-57,294],[70,-81,-68,287],[79,-88,-87,268],[84,-91,-96,261],[90,-89,-114,249],[96,-79,-125,243],[100,-69,-130,246],[107,-51,-135,238],[115,-27,-130,242],[119,-20,-127,245],[123,-12,-120,242],[129,-6,-104,237],[135,-17,-96,238],[141,-16,-109,233],[147,0,-108,246],[154,14,-96,251],[160,9,-80,247],[166,-2,-78,245],[172,-7,-92,237],[179,6,-102,245],[183,16,-102,243],[189,22,-89,244],[195,10,-90,245],[201,17,-102,259],[205,26,-103,261],[211,35,-91,265],[217,25,-83,271],[223,27,-95,277],[227,36,-94,288],[233,40,-82,284],[239,26,-82,285],[245,32,-94,296],[251,45,-91,291],[257,39,-78,303],[263,30,-87,299],[269,39,-97,304],[275,49,-89,315],[281,41,-80,323],[287,37,-92,323],[293,49,-91,333],[299,46,-77,347],[305,36,-84,339],[311,47,-91,357],[317,52,-78,371],[323,39,-76,385],[329,41,-88,387],[335,54,-85,403],[341,57,-71,422],[347,45,-65,414],[353,41,-78,422],[359,55,-78,434],[365,59,-65,446],[371,47,-59,440],[377,44,-71,445],[383,57,-70,454],[389,56,-57,453],[395,43,-58,452],[401,42,-72,461],[407,53,-76,472],[413,54,-62,472],[419,41,-67,469],[425,43,-81,489],[431,55,-85,508],[437,57,-72,508],[443,44,-73,515],[449,47,-86,536],[455,60,-80,543],[461,51,-69,552],[467,42,-80,567],[473,55,-86,584],[479,60,-71,595],[485,47,-69,615],[491,46,-82,626],[497,60,-85,641],[503,62,-71,648],[509,48,-75,651],[515,52,-88,663],[521,67,-81,664],[527,58,-67,668],[533,48,-79,685],[539,60,-89,702],[545,70,-77,714],[551,56,-72,710],[557,56,-86,730],[563,73,-88,741],[569,79,-74,762],[575,67,-67,761],[581,63,-80,771],[588,80,-88,795],[594,92,-76,802],[600,85,-61,803],[606,72,-65,809],[612,78,-79,816],[618,97,-70,822],[625,99,-42,827],[630,100,-25,824],[635,101,-7,818],[640,103,10,818],[645,108,26,816],[650,114,41,810],[655,119,56,810],[659,123,64,808],[665,132,84,793],[669,135,92,787],[675,137,115,781],[680,137,130,779],[685,138,143,775],[690,141,157,768],[694,139,168,761],[700,129,185,745],[705,120,197,737],[710,109,206,727],[714,102,211,726],[719,89,218,724],[725,71,226,738],[731,58,228,747],[737,51,215,741],[743,65,207,747],[749,74,220,742],[755,63,234,755],[760,51,240,771],[766,40,241,769],[772,40,228,764],[778,53,237,768],[785,43,250,774],[789,34,249,770],[793,27,243,766],[797,23,234,770],[804,26,217,769],[810,39,208,756],[820,63,225,747],[825,71,235,758],[829,78,243,776],[835,88,252,790],[841,88,266,796],[847,76,264,800],[853,79,250,812],[859,96,251,825],[865,96,267,820],[871,81,265,829],[877,77,246,829],[885,82,218,836],[890,87,201,817],[895,92,185,824],[904,102,161,813],[909,106,149,804],[915,110,129,806],[920,113,116,798],[925,116,103,792],[930,118,90,786],[936,119,77,777],[940,119,64,772],[945,118,50,764],[950,119,37,759],[954,121,30,762],[960,124,13,768],[965,128,1,763],[970,132,-8,760],[974,140,-14,756],[978,151,-18,758],[985,172,-13,741],[989,180,-12,737],[993,190,-16,729],[1000,195,-33,714],[1004,190,-43,707],[1010,175,-52,698],[1015,161,-56,701],[1020,148,-60,699],[1025,136,-64,702],[1030,124,-68,709],[1035,112,-71,706],[1040,100,-75,702],[1045,89,-80,699],[1050,77,-84,690],[1055,66,-90,682],[1060,55,-95,677],[1065,44,-102,671],[1070,33,-108,658],[1075,21,-114,656],[1080,10,-121,647],[1085,-1,-129,634],[1090,-11,-137,638],[1095,-20,-144,637],[1100,-31,-150,633],[1105,-43,-157,630],[1110,-54,-165,626],[1116,-67,-167,619],[1120,-81,-159,614],[1126,-95,-154,614],[1132,-105,-166,610],[1139,-93,-178,604],[1144,-79,-176,605],[1148,-68,-170,610],[1152,-58,-163,613],[1158,-44,-166,617],[1164,-45,-180,606],[1168,-54,-183,603],[1175,-68,-173,607],[1179,-71,-161,610],[1185,-64,-146,615],[1191,-53,-150,607],[1197,-61,-161,600],[1203,-75,-154,611],[1209,-75,-138,607],[1213,-68,-130,607],[1218,-55,-125,597],[1225,-33,-118,584],[1230,-19,-113,581],[1235,-6,-108,592],[1240,8,-103,590],[1245,21,-98,572],[1250,35,-92,566],[1255,45,-87,556],[1260,60,-78,545],[1265,72,-69,536],[1269,83,-63,529],[1273,91,-60,526],[1280,114,-53,532],[1285,128,-50,531],[1290,142,-44,523],[1295,156,-36,524],[1300,167,-29,532],[1306,173,-14,541],[1312,161,-10,543],[1318,164,-23,557],[1324,180,-21,560],[1330,175,-8,567],[1336,169,-19,568],[1342,184,-22,577],[1348,188,-7,581],[1354,176,-10,579],[1358,178,-20,589],[1364,193,-23,600],[1370,192,-11,605],[1376,185,-18,605],[1382,198,-23,604],[1389,208,-8,603],[1396,203,10,601],[1403,190,25,595],[1410,173,29,603],[1414,164,26,604],[1420,154,17,614],[1424,152,8,622],[1431,161,-4,626],[1435,171,-5,627],[1439,181,-2,633],[1443,188,7,636],[1450,188,25,644],[1454,182,33,644],[1458,173,38,642],[1464,161,33,641],[1468,157,24,645],[1474,161,10,651],[1478,170,6,658],[1484,186,8,667],[1488,193,15,671],[1494,196,31,669],[1498,192,41,674],[1504,180,50,672],[1510,167,54,673],[1516,158,44,671],[1523,168,30,676],[1529,183,28,685],[1533,193,32,700],[1539,202,44,704],[1543,202,55,697],[1551,190,71,709],[1555,183,76,709],[1561,169,78,713],[1565,160,76,708],[1569,153,70,703],[1576,155,54,702],[1580,163,48,699],[1586,178,45,704],[1591,190,46,715],[1595,200,48,724],[1601,211,58,727],[1607,206,73,716],[1613,195,66,722],[1619,206,56,726],[1625,218,66,726],[1631,209,78,723],[1637,198,70,733],[1644,204,56,729],[1648,213,52,743],[1654,227,56,743],[1658,234,65,742],[1664,232,79,755],[1670,218,77,746],[1676,219,63,756],[1680,228,57,754],[1686,243,60,764],[1692,247,76,784],[1698,239,85,783],[1704,229,78,787],[1710,240,72,792],[1716,244,85,797],[1722,231,87,800],[1728,232,75,807],[1734,246,79,804],[1741,238,96,808],[1745,234,105,807],[1751,231,120,808],[1755,224,130,804],[1761,210,133,813],[1771,193,116,808],[1776,186,105,804],[1781,179,94,802],[1786,172,84,805],[1791,165,74,803],[1795,161,64,798],[1801,158,50,790],[1807,149,38,784],[1811,141,31,779],[1816,132,24,773],[1821,121,17,774],[1826,111,11,773],[1831,100,4,764],[1836,90,-4,773],[1841,78,-10,767],[1845,67,-15,753],[1850,55,-22,744],[1856,44,-30,753],[1862,33,-40,745],[1868,42,-51,743],[1874,50,-40,727],[1881,38,-26,732],[1885,28,-26,723],[1890,16,-32,718],[1896,4,-39,715],[1901,-6,-45,702],[1906,-18,-52,698],[1911,-30,-58,713],[1915,-38,-63,716],[1921,-38,-76,714],[1927,-24,-72,710],[1933,-25,-57,710],[1941,-45,-56,717],[1946,-55,-61,721],[1951,-65,-67,715],[1956,-74,-75,710],[1961,-84,-82,709],[1966,-94,-88,716],[1971,-102,-96,711],[1976,-110,-104,701],[1982,-114,-117,684],[1989,-98,-125,671],[1993,-88,-123,669],[2001,-67,-116,658],[2008,-51,-108,675],[2014,-47,-94,678],[2020,-60,-95,680],[2026,-55,-108,682],[2032,-40,-106,698],[2038,-40,-90,699],[2044,-52,-94,708],[2050,-44,-106,717],[2056,-34,-96,729],[2062,-43,-84,739],[2068,-52,-93,743],[2074,-40,-99,755],[2080,-32,-87,757],[2086,-43,-77,757],[2092,-51,-89,769],[2098,-40,-97,777],[2104,-30,-86,782],[2110,-41,-77,786],[2116,-46,-89,792],[2122,-32,-90,799],[2128,-31,-75,801],[2134,-45,-75,804],[2140,-42,-88,814],[2146,-27,-87,819],[2152,-12,-80,822],[2156,-2,-74,815],[2161,11,-68,812],[2166,24,-62,809],[2171,37,-56,817],[2176,49,-49,805],[2180,62,-42,795],[2186,77,-38,787],[2191,90,-34,786],[2196,104,-28,775],[2201,118,-22,784],[2208,135,-9,791],[2214,134,9,798],[2220,119,11,804],[2226,119,-2,810],[2232,134,0,815],[2238,137,18,817],[2245,121,25,818],[2251,108,19,826],[2255,100,14,832],[2261,87,6,829],[2265,77,4,831],[2269,68,8,826],[2276,54,22,806],[2281,43,31,797],[2286,32,41,790],[2291,21,50,789],[2301,-2,72,759],[2306,-12,84,758],[2315,-25,104,728],[2321,-40,117,711],[2326,-53,124,706],[2331,-67,131,700],[2340,-87,148,690],[2346,-99,164,678],[2351,-106,174,672],[2356,-114,187,679],[2360,-121,197,679],[2366,-131,208,678],[2371,-142,220,669],[2376,-152,231,673],[2381,-162,242,688],[2387,-174,246,703],[2393,-178,234,703],[2399,-163,235,723],[2405,-164,251,745],[2411,-178,252,755],[2417,-176,239,743],[2423,-160,239,772],[2429,-156,255,787],[2435,-170,262,809],[2441,-176,249,806],[2447,-161,244,810],[2451,-146,248,824],[2456,-131,251,836],[2461,-120,254,845],[2465,-110,262,850],[2471,-103,285,843],[2476,-99,302,848],[2480,-98,313,849],[2484,-100,326,841],[2491,-115,348,833],[2496,-127,358,828],[2501,-139,365,821],[2505,-147,369,819],[2511,-162,366,791],[2521,-165,335,789],[2526,-164,322,794],[2531,-163,309,793],[2536,-162,296,803],[2541,-162,284,801],[2546,-162,271,790],[2551,-161,258,785],[2556,-161,244,778],[2561,-162,230,776],[2566,-164,217,764],[2576,-171,188,755],[2581,-175,174,755],[2586,-177,160,738],[2591,-178,144,729],[2596,-178,128,734],[2601,-178,114,745],[2605,-177,105,748],[2609,-176,94,747],[2615,-163,84,744],[2621,-153,96,724],[2627,-164,107,700],[2634,-179,98,707],[2638,-181,90,704],[2644,-177,75,695],[2648,-172,66,686],[2655,-160,50,670],[2661,-148,34,656],[2666,-139,23,648],[2671,-130,12,639],[2676,-122,1,627],[2681,-117,-10,610],[2686,-111,-27,594],[2690,-107,-38,592],[2696,-96,-51,577],[2700,-87,-55,570],[2705,-70,-60,561],[2711,-52,-66,544],[2716,-36,-70,532],[2721,-20,-74,533],[2731,12,-82,536],[2735,20,-86,538],[2741,31,-99,538],[2747,28,-114,520],[2754,11,-118,507],[2758,2,-111,491],[2765,-5,-90,496],[2769,-3,-78,514],[2775,10,-71,518],[2781,21,-83,499],[2787,12,-96,497],[2791,2,-96,501],[2795,-8,-92,506],[2799,-15,-83,525],[2805,-12,-68,542],[2811,0,-71,545],[2817,-7,-81,548],[2823,-19,-71,568],[2829,-14,-60,574],[2835,-5,-68,565],[2841,-15,-80,585],[2847,-27,-80,595],[2853,-29,-67,598],[2859,-17,-68,595],[2866,-17,-84,615],[2872,-30,-89,628],[2878,-35,-77,626],[2884,-23,-77,631],[2890,-24,-91,644],[2896,-39,-94,645],[2902,-41,-80,658],[2908,-30,-84,667],[2914,-34,-97,672],[2920,-46,-91,681],[2926,-40,-78,685],[2932,-29,-84,693],[2938,-32,-97,696],[2944,-47,-95,709],[2950,-49,-80,718],[2956,-36,-74,720],[2962,-31,-87,724],[2969,-47,-91,732],[2975,-51,-76,754],[2981,-40,-72,758],[2987,-34,-86,757],[2993,-47,-91,776],[2999,-55,-78,791],[3005,-47,-66,806],[3011,-35,-72,796],[3017,-39,-85,821],[3023,-52,-79,833],[3030,-47,-63,838],[3036,-29,-56,835],[3041,-15,-52,843],[3045,-7,-50,848],[3051,12,-46,839],[3056,27,-45,825],[3061,43,-43,818],[3066,59,-39,824],[3071,76,-36,824],[3076,94,-32,824],[3080,104,-29,827],[3086,124,-20,822],[3092,139,0,818],[3096,139,11,815],[3101,131,27,809],[3105,122,37,800],[3111,103,53,788],[3116,90,64,786],[3121,79,73,778],[3126,63,81,761],[3130,49,84,746],[3136,24,87,748],[3140,14,87,747],[3146,-6,85,727],[3151,-22,80,712],[3156,-40,72,697],[3160,-53,66,688],[3165,-64,60,678],[3171,-83,45,658],[3176,-95,33,646],[3180,-102,25,639],[3185,-113,7,624],[3191,-122,-11,617],[3196,-124,-24,613],[3200,-123,-38,602],[3206,-117,-58,586],[3211,-108,-76,580],[3216,-100,-91,572],[3223,-89,-108,569],[3229,-71,-118,563],[3233,-57,-118,555],[3240,-30,-113,554],[3244,-16,-110,556],[3251,12,-102,566],[3256,28,-97,574],[3261,44,-90,569],[3266,61,-80,568],[3271,76,-70,584],[3275,88,-63,576],[3281,106,-52,567],[3286,121,-43,559],[3291,137,-35,554],[3296,150,-28,546],[3302,153,-10,545],[3306,140,-4,522],[3311,122,-3,516],[3319,100,-16,506],[3326,85,-42,516],[3331,75,-57,516],[3336,64,-71,522],[3341,52,-82,535],[3346,38,-92,531],[3351,24,-102,530],[3358,16,-121,521],[3364,24,-140,515],[3368,36,-148,516],[3372,51,-150,503],[3380,81,-140,481],[3386,105,-126,461],[3392,120,-113,444],[3399,132,-88,418],[3405,121,-67,402],[3409,106,-62,403],[3416,80,-67,386],[3420,66,-74,376],[3427,46,-90,377],[3432,32,-103,384],[3437,20,-116,386],[3442,8,-130,388],[3446,0,-143,389],[3452,4,-162,388],[3456,16,-171,375],[3461,35,-174,353],[3467,59,-170,333],[3472,78,-160,319],[3477,94,-148,311],[3484,106,-124,294],[3490,95,-103,282],[3496,73,-94,267],[3500,58,-93,265],[3507,33,-95,274],[3512,15,-98,268],[3516,1,-98,279],[3522,-17,-100,274],[3526,-29,-103,256],[3532,-34,-118,250],[3539,-16,-125,261],[3546,6,-116,249],[3550,19,-109,246],[3557,38,-95,267],[3562,50,-86,275],[3567,64,-76,270],[3572,78,-66,249],[3577,90,-56,224],[3582,102,-45,212],[3587,114,-35,219],[3592,124,-26,210],[3597,135,-15,193],[3601,142,-5,177],[3606,145,11,165],[3612,144,29,154],[3618,137,45,124],[3622,129,53,112],[3626,119,56,95],[3630,107,52,72],[3637,94,44,50],[3642,82,38,35],[3647,71,33,19],[3655,54,24,1],[3660,46,20,0],[3666,39,19,0],[3672,37,19,0]];                            // demo: echte vlucht 14 april 2026 (t s, x en y in 10 m, h m)
+
+const $ = id => document.getElementById(id);
+const C = { bg: '#000', grid: '#27272a', txt: '#f4f4f5', mut: '#a1a1aa', red: '#ef4444', redT: '#fca5a5',
+            amb: '#f59e0b', grn: '#22c55e', blu: '#60a5fa' };
+
+/* ---------- geometrie ---------- */
+function inside(x, y) {
+  let c = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const a = P[i], b = P[j];
+    if ((a[1] > y) != (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+const NIN = P.map((a, i) => {
+  const b = P[(i + 1) % 5], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
+  let n = [-dy / l, dx / l];
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  if (!inside(mx + n[0] * 0.05, my + n[1] * 0.05)) n = [-n[0], -n[1]];
+  return n;
+});
+const ALLOW = (() => {
+  const o = [-NIN[4][0] * 40, -NIN[4][1] * 40];
+  return [P[0], P[1], P[2], P[3], P[4], [P[4][0] + o[0], P[4][1] + o[1]], [P[0][0] + o[0], P[0][1] + o[1]]];
+})();
+function segC(px, py, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let t = ((px - a[0]) * dx + (py - a[1]) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+  const cx = a[0] + t * dx, cy = a[1] + t * dy;
+  return { d: Math.hypot(px - cx, py - cy), x: cx, y: cy };
+}
+function edges() {
+  let hard = { d: 1e9, i: 0 }, near = { d: 1e9, i: 0 };
+  for (let i = 0; i < 5; i++) {
+    const c = segC(G.x, G.y, P[i], P[(i + 1) % 5]); c.i = i;
+    if (HARD[i] && c.d < hard.d) hard = c;
+    if (c.d < near.d) near = c;
+  }
+  return { hard, near };
+}
+function toLocal(lat, lon) { return [(lon - F[1]) * KX, (lat - F[0]) * KY]; }
+
+/* ---------- kegel ---------- */
+function wind() { const a = (S.wd + 180) * Math.PI / 180, w = S.ws * 0.514444; return [w * Math.sin(a), w * Math.cos(a)]; }
+function vg(tx, ty) {
+  const va = S.va / 3.6, w = wind(), al = w[0] * tx + w[1] * ty, px = w[0] - al * tx, py = w[1] - al * ty, pp = px * px + py * py;
+  if (pp >= va * va) return 0;
+  return al + Math.sqrt(va * va - pp);
+}
+function hReq(x, y) {
+  const d = Math.hypot(x, y); if (d < 0.01) return S.ar;
+  const v = vg(-x / d, -y / d); if (v <= 0.5) return Infinity;
+  return S.ar + d * 1000 * (S.va / 3.6) / (S.ld * v);
+}
+function reach(h, b) {
+  const v = vg(-Math.sin(b), -Math.cos(b));
+  if (v <= 0.5 || h <= S.ar) return 0;
+  return (h - S.ar) * S.ld * v / (S.va / 3.6) / 1000;
+}
+
+/* ---------- opslag ---------- */
+function today() { return new Date().toISOString().slice(0, 10); }
+function loadS() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem('kha_set') || '{}'); } catch (e) {}
+  const r = Object.assign({}, DEF, s);
+  if (s.day !== today()) DAILY.forEach(k => r[k] = null);
+  return r;
+}
+function saveS() { try { localStorage.setItem('kha_set', JSON.stringify(Object.assign({}, S, { day: today() }))); } catch (e) {} }
+
+/* ---------- toestand ---------- */
+let S = loadS();
+let G = { x: 0, y: 0, h: 0, gs: 0 }, H = 0;
+let gps = { ok: false, acc: null, alt: null, lat: null, lon: null, gs: 0, t: 0, err: '' };
+let altBuf = [], ref = null, refInfo = '';
+let flying = false, demo = null, inFlightSet = false;
+let trackUp = true, zoom = 8, trail = [], log = [], lastLogT = 0;
+let level = '', lastAlarm = 0, actx = null, wakeLock = null;
+
+/* ---------- formulier ---------- */
+function fillForm() {
+  KEYS.forEach(k => { const el = $('s_' + k); el.value = S[k] == null ? '' : S[k]; el.classList.toggle('empty', S[k] == null); });
+  $('s_snd').checked = !!S.snd; $('setErr').textContent = '';
+}
+function readForm() {
+  const n = { snd: $('s_snd').checked };
+  for (const k of KEYS) {
+    const el = $('s_' + k), f = el.closest('label').firstChild, name = (f.nodeType === 1 ? f.firstChild : f).textContent.trim();
+    if (el.value.trim() === '') { el.focus(); return 'Vul "' + name + '" in.'; }
+    const v = parseFloat(el.value);
+    if (!isFinite(v) || v < +el.min || v > +el.max) { el.focus(); return 'Vul bij "' + name + '" een waarde tussen ' + el.min + ' en ' + el.max + ' in.'; }
+    n[k] = v;
+  }
+  if (n.ar >= n.mx) return 'De aankomsthoogte moet lager zijn dan de maximale hoogte.';
+  if (n.vm >= n.mx - n.ar) return 'De hoogtemarge is groter dan de ruimte tussen aankomsthoogte en hoogtegrens.';
+  if (n.va / 3.6 <= n.ws * 0.514444) return 'De wind is sterker dan je glijsnelheid. Kijk beide waarden na.';
+  S = n; saveS(); return null;
+}
+KEYS.forEach(k => $('s_' + k).addEventListener('input', e => { $('setErr').textContent = ''; e.target.classList.remove('empty'); }));
+
+/* ---------- schermen ---------- */
+function show(v) {
+  ['vSet', 'vChk', 'vFly'].forEach(id => $(id).hidden = id !== v);
+  if (v === 'vFly') setTimeout(draw, 30);
+  window.scrollTo(0, 0);
+}
+function showSetPre() {
+  inFlightSet = false;
+  $('setFly').hidden = true; $('btnPre').hidden = false; $('btnFly').hidden = true;
+  $('setTitle').textContent = 'Keiheuvel Area';
+  $('setSub').textContent = 'Vul de gegevens van vandaag in voor je vertrekt.';
+  fillForm(); renderLastLog(); show('vSet');
+}
+function showSetFly() {
+  inFlightSet = true;
+  $('setFly').hidden = false; $('btnPre').hidden = true; $('btnFly').hidden = false;
+  $('setTitle').textContent = 'Instellingen tijdens de vlucht';
+  $('setSub').textContent = 'De kaart en de alarmen blijven ondertussen werken.';
+  fillForm(); show('vSet');
+}
+function fmtRow(a, b) { return '<div>' + a + '</div><div>' + b + '</div>'; }
+function showChk() {
+  const rows = [
+    ['Wind', String(S.wd).padStart(3, '0') + '° / ' + S.ws + ' kt'],
+    ['Max. hoogte Brogel', S.mx + ' m'],
+    ['Glijgetal', S.ld],
+    ['Glijsnelheid', S.va + ' km/h'],
+    ['Aankomsthoogte', S.ar + ' m'],
+    ['Marge hoogte', S.vm + ' m'],
+    ['Marge zijgrens', S.hm + ' m'],
+    ['Marge kegel', S.cm + ' m'],
+    ['Geluid', S.snd ? 'aan' : 'uit']
+  ];
+  $('chkList').innerHTML = rows.map(r => fmtRow(r[0], r[1])).join('');
+  let note = '';
+  if (!gps.ok) note = 'Nog geen GPS-fix. De app start wel, maar wacht op de GPS.';
+  else if (gps.alt == null) note = 'Deze gsm geeft geen GPS-hoogte. Hoogte en kegel werken dan niet.';
+  else if (gps.gs > 3) note = 'Je beweegt. Het hoogte-nulpunt wordt pas goed gezet als je stilstaat op het veld.';
+  else note = 'Bij de start wordt je huidige GPS-hoogte het nulpunt (0 m boven het veld).';
+  $('chkNote').textContent = note;
+  show('vChk');
+}
+
+/* ---------- GPS ---------- */
+function startGPS() {
+  if (!('geolocation' in navigator)) { gps.err = 'Deze browser geeft geen toegang tot de GPS.'; gpsLine(); return; }
+  navigator.geolocation.watchPosition(p => {
+    const c = p.coords;
+    gps.ok = true; gps.err = ''; gps.acc = c.accuracy; gps.lat = c.latitude; gps.lon = c.longitude;
+    gps.alt = c.altitude; gps.t = performance.now();
+    gps.gs = c.speed != null && isFinite(c.speed) ? c.speed : 0;
+    if (gps.alt != null && gps.gs < 3) { altBuf.push(gps.alt); if (altBuf.length > 10) altBuf.shift(); }
+    gpsLine();
+    if (!demo) feedGPS(c, p.timestamp);
+  }, e => {
+    gps.ok = false;
+    gps.err = e.code === 1 ? 'Locatietoegang geweigerd. Sta locatie toe voor deze app in de instellingen van Chrome.' : 'Nog geen GPS-fix. Zorg voor vrij zicht op de lucht.';
+    gpsLine();
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+}
+function gpsLine() {
+  const el = $('gpsS');
+  if (!gps.ok) { el.textContent = 'GPS: ' + (gps.err || 'wachten op fix'); el.style.color = '#fbbf24'; return; }
+  el.textContent = 'GPS ok · ±' + Math.round(gps.acc) + ' m · hoogte ' + (gps.alt == null ? 'niet beschikbaar' : 'beschikbaar');
+  el.style.color = gps.alt == null || gps.acc > 20 ? '#fbbf24' : '#4ade80';
+}
+function median(a) { const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; }
+function setRef() {
+  if (altBuf.length >= 3) { ref = median(altBuf); refInfo = 'nulpunt gezet'; return true; }
+  ref = null; refInfo = 'geschat'; return false;
+}
+function feedGPS(c, ts) {
+  const [x, y] = toLocal(c.latitude, c.longitude);
+  const h = c.altitude == null ? null : c.altitude - (ref == null ? ALT_FALLBACK : ref);
+  let hd = null;
+  if (c.heading != null && isFinite(c.heading) && c.speed > 3) hd = c.heading * Math.PI / 180;
+  feed(x, y, h, hd, ts / 1000, c.speed || 0);
+  if (flying && ts / 1000 - lastLogT >= 2) {
+    lastLogT = ts / 1000;
+    log.push([c.latitude.toFixed(6), c.longitude.toFixed(6), c.altitude == null ? '' : c.altitude.toFixed(1), new Date(ts).toISOString()]);
+  }
+}
+function feed(x, y, h, hd, t, gs) {
+  const prev = trail.length ? trail[trail.length - 1] : null;
+  if (hd == null && prev) { const dx = x - prev.x, dy = y - prev.y; if (Math.hypot(dx, dy) > 0.015) hd = Math.atan2(dx, dy); }
+  if (hd != null) H = hd;
+  G = { x, y, h: h == null ? null : Math.max(0, h), gs };
+  trail.push({ x, y, t }); while (trail.length && t - trail[0].t > 180) trail.shift();
+  if (flying) { checkAlarm(); draw(); }
+}
+
+/* ---------- status en alarm ---------- */
+function status() {
+  if (!demo && (!gps.ok || performance.now() - gps.t > 5000)) return ['GEEN GPS', 'danger'];
+  const d = Math.hypot(G.x, G.y), e = edges(), ins = inside(G.x, G.y);
+  if (G.h == null) return ins ? ['Geen GPS-hoogte', 'warning'] : ['Buiten Keiheuvel area', 'danger'];
+  const r = hReq(G.x, G.y), res = G.h - r;
+  if (G.h < 15 && d < 1) return ['Op het veld', 'info'];
+  if (G.h >= S.mx) return ['HOOGTEGRENS: DAAL ONDER ' + S.mx + ' m', 'danger'];
+  if (!ins && HARD[e.near.i]) return ['BUITEN AREA: ' + LBL[e.near.i].toUpperCase(), 'danger'];
+  if (d < 1.5 && G.h < S.ar + 30) return ['Circuit en landing', 'info'];
+  if (res < 0) return ['BUITEN KEGEL: VLIEG NAAR HET VELD', 'danger'];
+  if (S.mx - G.h < S.vm) return ['Nadert hoogtegrens: nog ' + Math.round(S.mx - G.h) + ' m', 'warning'];
+  if (ins && e.hard.d * 1000 < S.hm) return ['Nadert ' + LBL[e.hard.i] + '-grens: nog ' + dist(e.hard.d), 'warning'];
+  if (res < S.cm) return ['Krap in de kegel: nog ' + Math.round(res) + ' m', 'warning'];
+  if (!ins) return ['Buiten area aan noordwestzijde (geen TMA)', 'warning'];
+  return ['Binnen area en binnen de kegel', 'ok'];
+}
+function beep(f, dur, n, gap) {
+  if (!S.snd || !actx) return;
+  for (let i = 0; i < n; i++) {
+    const t0 = actx.currentTime + i * (dur + gap), o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = f; o.type = 'square'; g.gain.setValueAtTime(0.25, t0); g.gain.setValueAtTime(0, t0 + dur);
+    o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+}
+function checkAlarm() {
+  const lv = status()[1], now = performance.now();
+  if (lv === 'danger' && (level !== 'danger' || now - lastAlarm > 6000)) {
+    beep(880, 0.18, 3, 0.1); try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {}
+    lastAlarm = now;
+  } else if (lv === 'warning' && level !== 'warning' && level !== 'danger') beep(660, 0.25, 1, 0);
+  level = lv;
+}
+
+/* ---------- tekenen ---------- */
+function nl(v, d) { return v.toFixed(d).replace('.', ','); }
+function dist(km) { return km < 1 ? Math.round(km * 1000) + ' m' : nl(km, 1) + ' km'; }
+function colOf(s) { return s === 'danger' ? C.red : s === 'warning' ? C.amb : s === 'info' ? C.blu : C.grn; }
+function fit(c) {
+  const d = Math.min(3, window.devicePixelRatio || 1), w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * d) || c.height !== Math.round(h * d)) { c.width = Math.round(w * d); c.height = Math.round(h * d); }
+  const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); return [w, h, g];
+}
+function draw() {
+  if ($('vFly').hidden) { updFlyBar(); return; }
+  const s = status();
+  const bg = s[1] === 'danger' ? '#dc2626' : s[1] === 'warning' ? '#f59e0b' : s[1] === 'info' ? '#1e3a8a' : '#16a34a';
+  const fg = s[1] === 'warning' || s[1] === 'ok' ? '#000' : '#fff';
+  $('st').textContent = (demo ? 'DEMO ' + demo.spd + 'x · ' : '') + s[0]; $('st').style.background = bg; $('st').style.color = fg;
+  const e = edges(), d = Math.hypot(G.x, G.y), r = G.h == null ? NaN : hReq(G.x, G.y);
+  $('tH').textContent = G.h == null ? '--' : Math.round(G.h) + ' m';
+  $('tR').textContent = isFinite(r) ? ((G.h - r >= 0 ? '+' : '') + Math.round(G.h - r) + ' m') : '--';
+  $('tB').textContent = (inside(G.x, G.y) ? '' : 'uit ') + dist(e.hard.d);
+  const brg = (Math.round(Math.atan2(-G.x, -G.y) * 180 / Math.PI) + 360) % 360;
+  $('tD').textContent = dist(d); $('tDl').textContent = 'Veld ' + String(brg).padStart(3, '0') + '°';
+  drawMap(s[1]); drawProf(s[1]);
+}
+function updFlyBar() {
+  if (!inFlightSet) return;
+  const s = status(), el = $('setFly');
+  el.textContent = 'In vlucht: ' + s[0];
+  el.style.background = s[1] === 'danger' ? '#dc2626' : s[1] === 'warning' ? '#f59e0b' : '#27272a';
+  el.style.color = s[1] === 'warning' ? '#000' : '#fff';
+}
+function drawMap(lv) {
+  const [w, h, g] = fit($('map'));
+  const m = trackUp ? H : 0, cm = Math.cos(m), sm = Math.sin(m), s = Math.min(w, h * 1.2) / zoom, cx = w / 2, cy = trackUp ? h * 0.64 : h / 2;
+  const S2 = (x, y) => { const dx = x - G.x, dy = y - G.y; return [cx + (dx * cm - dy * sm) * s, cy - (dx * sm + dy * cm) * s]; };
+  const dir = a => [Math.sin(a - m), -Math.cos(a - m)];
+  const allowPath = () => { ALLOW.forEach((p, i) => { const q = S2(p[0], p[1]); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.closePath(); };
+  g.fillStyle = C.bg; g.fillRect(0, 0, w, h);
+  g.beginPath(); g.rect(0, 0, w, h); allowPath(); g.fillStyle = 'rgba(239,68,68,0.22)'; g.fill('evenodd');
+  const fc = S2(0, 0);
+  g.strokeStyle = C.grid; g.lineWidth = 1;
+  for (let r = 2; r <= 16; r += 2) { g.beginPath(); g.arc(fc[0], fc[1], r * s, 0, 7); g.stroke(); }
+  function cone(hh) {
+    g.beginPath();
+    for (let a = 0; a <= 360; a += 3) { const b = a * Math.PI / 180, r = reach(hh, b), q = S2(Math.sin(b) * r, Math.cos(b) * r); a ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }
+    g.closePath();
+  }
+  g.save(); g.beginPath(); allowPath(); g.clip();
+  cone(S.mx); g.setLineDash([8, 6]); g.strokeStyle = C.grn; g.lineWidth = 2; g.stroke(); g.setLineDash([]);
+  if (G.h != null && G.h > S.ar) { cone(G.h); g.fillStyle = 'rgba(34,197,94,0.30)'; g.fill(); g.strokeStyle = C.grn; g.lineWidth = 3; g.stroke(); }
+  g.restore();
+  if (S.hm > 0) {
+    g.setLineDash([6, 6]); g.strokeStyle = C.amb; g.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      if (!HARD[i]) continue;
+      const a = P[i], b = P[(i + 1) % 5], o = S.hm / 1000, n = NIN[i], q1 = S2(a[0] + n[0] * o, a[1] + n[1] * o), q2 = S2(b[0] + n[0] * o, b[1] + n[1] * o);
+      g.beginPath(); g.moveTo(q1[0], q1[1]); g.lineTo(q2[0], q2[1]); g.stroke();
+    }
+    g.setLineDash([]);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = S2(P[i][0], P[i][1]), b = S2(P[(i + 1) % 5][0], P[(i + 1) % 5][1]);
+    g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+    if (HARD[i]) { g.strokeStyle = C.red; g.lineWidth = 5; } else { g.setLineDash([5, 7]); g.strokeStyle = C.mut; g.lineWidth = 2; }
+    g.stroke(); g.setLineDash([]);
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    if (mx > -50 && mx < w + 50 && my > -20 && my < h + 20) { g.fillStyle = HARD[i] ? C.redT : C.mut; g.font = '600 14px system-ui,sans-serif'; g.textAlign = 'center'; g.fillText(LBL[i], mx, my - 9); }
+  }
+  const e = edges();
+  if (e.hard.d < 2) {
+    const q = S2(e.hard.x, e.hard.y);
+    g.setLineDash([4, 4]); g.strokeStyle = C.red; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(q[0], q[1]); g.stroke(); g.setLineDash([]);
+    g.fillStyle = C.redT; g.textAlign = 'left'; g.font = '700 15px system-ui,sans-serif'; g.fillText(dist(e.hard.d), (cx + q[0]) / 2 + 8, (cy + q[1]) / 2);
+  }
+  g.strokeStyle = 'rgba(96,165,250,0.7)'; g.lineWidth = 2; g.beginPath();
+  trail.forEach((p, i) => { const q = S2(p.x, p.y); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.stroke();
+  const rx = Math.sin(RHD) * RWY / 2, ry = Math.cos(RHD) * RWY / 2, r1 = S2(-rx, -ry), r2 = S2(rx, ry);
+  g.strokeStyle = C.txt; g.lineWidth = 7; g.beginPath(); g.moveTo(r1[0], r1[1]); g.lineTo(r2[0], r2[1]); g.stroke();
+  g.fillStyle = C.txt; g.textAlign = 'left'; g.font = '700 14px system-ui,sans-serif'; g.fillText('EBKH', fc[0] + 12, fc[1] + 20);
+  g.setLineDash([3, 6]); g.strokeStyle = C.mut; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(fc[0], fc[1]); g.stroke(); g.setLineDash([]);
+  g.save(); g.translate(cx, cy); g.rotate(H - m); g.scale(1.3, 1.3); g.fillStyle = colOf(lv); g.strokeStyle = '#fff'; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(0, -11); g.lineTo(2, -4); g.lineTo(30, -2); g.lineTo(30, 1); g.lineTo(2, 1.5); g.lineTo(1.5, 13); g.lineTo(7, 14); g.lineTo(7, 16.5);
+  g.lineTo(-7, 16.5); g.lineTo(-7, 14); g.lineTo(-1.5, 13); g.lineTo(-2, 1.5); g.lineTo(-30, 1); g.lineTo(-30, -2); g.lineTo(-2, -4); g.closePath(); g.fill(); g.stroke(); g.restore();
+  const nx = 32, ny = 32, nd = dir(0);
+  g.fillStyle = '#18181b'; g.beginPath(); g.arc(nx, ny, 24, 0, 7); g.fill();
+  g.fillStyle = C.red; g.beginPath(); g.moveTo(nx + nd[0] * 20, ny + nd[1] * 20); g.lineTo(nx - nd[1] * 7, ny + nd[0] * 7); g.lineTo(nx + nd[1] * 7, ny - nd[0] * 7); g.fill();
+  g.fillStyle = C.txt; g.textAlign = 'center'; g.font = '700 13px system-ui,sans-serif'; g.fillText('N', nx - nd[0] * 15, ny - nd[1] * 15 + 5);
+  const wx = w - 36, wy = 34, wdv = dir((S.wd + 180) * Math.PI / 180);
+  g.fillStyle = '#18181b'; g.beginPath(); g.arc(wx, wy, 26, 0, 7); g.fill();
+  if (S.ws > 0) {
+    g.strokeStyle = C.txt; g.lineWidth = 3; g.beginPath(); g.moveTo(wx - wdv[0] * 18, wy - wdv[1] * 18); g.lineTo(wx + wdv[0] * 18, wy + wdv[1] * 18); g.stroke();
+    const hx = wx + wdv[0] * 18, hy = wy + wdv[1] * 18; g.fillStyle = C.txt; g.beginPath(); g.moveTo(hx + wdv[0] * 4, hy + wdv[1] * 4);
+    g.lineTo(hx - wdv[0] * 7 - wdv[1] * 7, hy - wdv[1] * 7 + wdv[0] * 7); g.lineTo(hx - wdv[0] * 7 + wdv[1] * 7, hy - wdv[1] * 7 - wdv[0] * 7); g.fill();
+  }
+  g.fillStyle = C.txt; g.textAlign = 'center'; g.font = '600 13px system-ui,sans-serif'; g.fillText(S.wd + '° ' + S.ws + ' kt', wx, wy + 44);
+  g.textAlign = 'left'; g.fillStyle = C.mut; g.fillRect(12, h - 14, s, 3); g.font = '600 12px system-ui,sans-serif'; g.fillText('1 km', 12, h - 20);
+  g.textAlign = 'right'; g.fillText((trackUp ? 'koers boven' : 'noord boven') + ' · ' + zoom + ' km', w - 10, h - 10);
+  if (lv === 'warning') { g.strokeStyle = C.amb; g.lineWidth = 10; g.strokeRect(5, 5, w - 10, h - 10); }
+  if (lv === 'danger') {
+    g.strokeStyle = C.red; g.lineWidth = 14; g.strokeRect(7, 7, w - 14, h - 14);
+    if (Math.floor(performance.now() / 400) % 2 === 0) { g.fillStyle = 'rgba(239,68,68,0.25)'; g.fillRect(0, 0, w, h); }
+  }
+}
+function drawProf(lv) {
+  const [w, h, g] = fit($('prof'));
+  g.fillStyle = '#0a0a0a'; g.fillRect(0, 0, w, h);
+  if (G.h == null) return;
+  const d = Math.hypot(G.x, G.y), dm = Math.max(4, d * 1.3), hm = Math.max(S.mx, G.h) + 100, L = 44, R = w - 10, Tp = 8, B = h - 18;
+  const X = v => L + v / dm * (R - L), Y = v => B - v / hm * (B - Tp);
+  g.fillStyle = 'rgba(239,68,68,0.22)'; g.fillRect(L, Tp, R - L, Y(S.mx) - Tp);
+  const bx = d > 0.01 ? G.x / d : 0, by = d > 0.01 ? G.y / d : 1, v = vg(-bx, -by), k = v > 0.5 ? (S.va / 3.6) / (S.ld * v) * 1000 : Infinity;
+  if (isFinite(k)) {
+    const dx = Math.min(dm, (S.mx - S.ar) / k);
+    g.beginPath(); g.moveTo(X(0), Y(S.ar)); g.lineTo(X(dx), Y(S.ar + dx * k)); g.lineTo(X(dx), Y(S.mx)); g.lineTo(X(0), Y(S.mx)); g.closePath(); g.fillStyle = 'rgba(34,197,94,0.30)'; g.fill();
+    g.strokeStyle = C.grn; g.lineWidth = 2; g.beginPath(); g.moveTo(X(0), Y(S.ar)); g.lineTo(X(dm), Y(Math.min(hm, S.ar + dm * k))); g.stroke();
+  }
+  if (S.vm > 0) { g.setLineDash([5, 5]); g.strokeStyle = C.amb; g.lineWidth = 1.5; g.beginPath(); g.moveTo(L, Y(S.mx - S.vm)); g.lineTo(R, Y(S.mx - S.vm)); g.stroke(); g.setLineDash([]); }
+  g.strokeStyle = C.red; g.lineWidth = 2; g.beginPath(); g.moveTo(L, Y(S.mx)); g.lineTo(R, Y(S.mx)); g.stroke();
+  g.strokeStyle = C.mut; g.lineWidth = 1; g.beginPath(); g.moveTo(L, Tp); g.lineTo(L, B); g.lineTo(R, B); g.stroke();
+  g.fillStyle = C.mut; g.font = '600 11px system-ui,sans-serif'; g.textAlign = 'right';
+  [0, S.ar, S.mx].forEach(t => g.fillText(Math.round(t), L - 4, Y(t) + 4));
+  g.textAlign = 'center'; const stp = dm > 12 ? 4 : dm > 6 ? 2 : 1;
+  for (let t = 0; t <= dm; t += stp) g.fillText(t + ' km', X(t), B + 13);
+  g.fillStyle = colOf(lv); g.beginPath(); g.arc(X(d), Y(G.h), 7, 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
+}
+setInterval(() => { if (flying) { if (demo || !gps.ok || performance.now() - gps.t > 1000) checkAlarm(); draw(); } }, 400);
+
+/* ---------- vlucht starten en stoppen ---------- */
+async function requestWake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {} }
+function releaseWake() { try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && flying) requestWake(); });
+function unlockAudio() {
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) {}
+}
+function startFlight(isDemo) {
+  unlockAudio(); requestWake();
+  flying = true; level = ''; trail = []; log = []; lastLogT = 0;
+  if (isDemo) {
+    demo = { t: 0, spd: 10, timer: null };
+    demo.timer = setInterval(() => {
+      demo.t += 0.25 * demo.spd;
+      if (demo.t > TR[TR.length - 1][0]) { stopFlight(); return; }
+      const p = posAt(demo.t);
+      feed(p.x, p.y, p.h, null, demo.t, 25);
+    }, 250);
+  } else {
+    setRef();
+    if (gps.ok && gps.lat != null) feed(...toLocal(gps.lat, gps.lon), gps.alt == null ? null : gps.alt - (ref == null ? ALT_FALLBACK : ref), null, performance.now() / 1000, gps.gs);
+  }
+  show('vFly');
+}
+function stopFlight() {
+  if (demo) { clearInterval(demo.timer); demo = null; }
+  else if (log.length > 1) {
+    try { localStorage.setItem('kha_log', JSON.stringify({ date: new Date().toISOString(), pts: log })); } catch (e) {}
+  }
+  flying = false; releaseWake(); showSetPre();
+}
+function posAt(t) {
+  let lo = 0, hi = TR.length - 1;
+  if (t <= TR[0][0]) return { x: TR[0][1] / 100, y: TR[0][2] / 100, h: TR[0][3] };
+  if (t >= TR[hi][0]) return { x: TR[hi][1] / 100, y: TR[hi][2] / 100, h: TR[hi][3] };
+  while (hi - lo > 1) { const mm = (lo + hi) >> 1; if (TR[mm][0] <= t) lo = mm; else hi = mm; }
+  const a = TR[lo], b = TR[hi], f = (t - a[0]) / (b[0] - a[0]);
+  return { x: (a[1] + (b[1] - a[1]) * f) / 100, y: (a[2] + (b[2] - a[2]) * f) / 100, h: a[3] + (b[3] - a[3]) * f };
+}
+
+/* ---------- log als GPX ---------- */
+function renderLastLog() {
+  const box = $('lastLog'); box.innerHTML = '';
+  let L = null; try { L = JSON.parse(localStorage.getItem('kha_log') || 'null'); } catch (e) {}
+  if (!L || !L.pts || L.pts.length < 2) return;
+  const dt = new Date(L.date);
+  const p = document.createElement('p'); p.className = 'sub'; p.style.marginTop = '20px';
+  p.textContent = 'Laatste vlucht: ' + dt.toLocaleDateString('nl-BE') + ' ' + dt.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + L.pts.length + ' punten';
+  const b = document.createElement('button'); b.textContent = 'Deel laatste vlucht (GPX)'; b.style.width = '100%';
+  b.addEventListener('click', () => shareGPX(L));
+  box.append(p, b);
+}
+async function shareGPX(L) {
+  const pts = L.pts.map(q => '<trkpt lat="' + q[0] + '" lon="' + q[1] + '">' + (q[2] !== '' ? '<ele>' + q[2] + '</ele>' : '') + '<time>' + q[3] + '</time></trkpt>').join('\n');
+  const gpx = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Keiheuvel Area v' + VERSION + '" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><name>Keiheuvel Area ' + L.date.slice(0, 10) + '</name><trkseg>\n' + pts + '\n</trkseg></trk></gpx>';
+  const name = 'keiheuvel_' + L.date.slice(0, 16).replace(/[:T]/g, '-') + '.gpx';
+  const file = new File([gpx], name, { type: 'application/gpx+xml' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; } }
+  catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/* ---------- knoppen ---------- */
+$('bNext').addEventListener('click', () => { const e = readForm(); if (e) { $('setErr').textContent = e; return; } showChk(); });
+$('bBack').addEventListener('click', showSetPre);
+$('bStart').addEventListener('click', () => startFlight(false));
+$('bDemo').addEventListener('click', () => { const e = readForm(); if (e) { $('setErr').textContent = e; return; } startFlight(true); });
+$('bSet').addEventListener('click', showSetFly);
+$('bSaveFly').addEventListener('click', () => { const e = readForm(); if (e) { $('setErr').textContent = e; return; } inFlightSet = false; show('vFly'); });
+$('bCancelFly').addEventListener('click', () => { inFlightSet = false; show('vFly'); });
+$('bZero').addEventListener('click', () => {
+  if (demo) { $('setErr').textContent = 'Niet beschikbaar in de demo.'; return; }
+  if (gps.gs > 3) { $('setErr').textContent = 'Enkel mogelijk als je stilstaat op het veld.'; return; }
+  if (setRef()) $('setErr').textContent = 'Hoogte staat nu op 0 m.'; else $('setErr').textContent = 'Nog te weinig GPS-hoogtes. Wacht enkele seconden.';
+});
+$('bOri').addEventListener('click', () => { trackUp = !trackUp; $('bOri').textContent = trackUp ? 'Koers boven' : 'Noord boven'; draw(); });
+function setZ(dz) { let i = ZL.indexOf(zoom) + dz; zoom = ZL[Math.max(0, Math.min(ZL.length - 1, i))]; draw(); }
+$('bZm').addEventListener('click', () => setZ(1));
+$('bZp').addEventListener('click', () => setZ(-1));
+let stopArmed = false;
+$('bStop').addEventListener('click', () => {
+  if (!stopArmed) { stopArmed = true; $('bStop').textContent = 'Zeker?'; setTimeout(() => { stopArmed = false; $('bStop').textContent = 'Stop'; }, 3000); return; }
+  stopArmed = false; $('bStop').textContent = 'Stop'; stopFlight();
+});
+
+/* ---------- start ---------- */
+window.addEventListener('resize', () => { if (flying) draw(); });
+showSetPre();
+startGPS();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
