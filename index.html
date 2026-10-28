@@ -101,7 +101,7 @@ input[type=checkbox]{width:26px;height:26px}
     <button id="bZero">Hoogte hier op 0 zetten</button>
   </div>
   <div id="lastLog"></div>
-  <p class="sub" style="margin-top:24px">Versie 3 · testversie, niet gecertificeerd</p>
+  <p class="sub" style="margin-top:24px">Versie 4 · testversie, niet gecertificeerd</p>
 </section>
 
 <!-- ============ controle ============ -->
@@ -143,7 +143,7 @@ input[type=checkbox]{width:26px;height:26px}
 <script>
 'use strict';
 /* ---------- vaste gegevens ---------- */
-const VERSION = 3;
+const VERSION = 4;
 const F = [51.180833, 5.220833];                 // EBKH ARP (AIP)
 const KX = 111.32 * Math.cos(F[0] * Math.PI / 180), KY = 111.13;
 const LL = [[51.187333, 5.137778], [51.141333, 5.224444], [51.19, 5.316667], [51.261944, 5.316667], [51.263333, 5.28]];
@@ -180,12 +180,28 @@ const NIN = P.map((a, i) => {
   if (!inside(mx + n[0] * 0.05, my + n[1] * 0.05)) n = [-n[0], -n[1]];
   return n;
 });
-// verboden gebied achter de harde zijde (zuidoost, CTR Kleine Brogel)
-const FORBID = (() => {
-  const o1 = [-NIN[1][0] * 40, -NIN[1][1] * 40];
-  return [P[1], P[2], [P[2][0] + o1[0], P[2][1] + o1[1]], [P[1][0] + o1[0], P[1][1] + o1[1]]];
+// CTR Kleine-Brogel One + Two (AIP EBBL AD 2.17 en ENR 2.2), samen als één veelhoek
+const CTR = (() => {
+  const L = (la, lo) => [(lo - F[1]) * KX, (la - F[0]) * KY];
+  const R = 9.26;                                            // 5 NM
+  const arc = (c, from, to, ccw) => {
+    let a0 = Math.atan2(from[0] - c[0], from[1] - c[1]), a1 = Math.atan2(to[0] - c[0], to[1] - c[1]), out = [];
+    if (ccw) { while (a1 > a0) a1 -= 2 * Math.PI; } else { while (a1 < a0) a1 += 2 * Math.PI; }
+    const n = Math.ceil(Math.abs(a1 - a0) / (3 * Math.PI / 180));
+    for (let k = 1; k < n; k++) { const a = a0 + (a1 - a0) * k / n; out.push([c[0] + R * Math.sin(a), c[1] + R * Math.cos(a)]); }
+    return out;
+  };
+  const A = L(51.295278, 5.515833), B = L(51.136111, 5.210556), C1 = L(51.079167, 5.3075),
+        D = L(51.022222, 5.403889), E = L(51.181111, 5.708611), C2 = L(51.239167, 5.613889);
+  return [A, B, ...arc(C1, B, D, true), D, E, ...arc(C2, E, A, true)];
 })();
-function inForbid(x, y) { return pip(FORBID, x, y); }
+// verboden = in de CTR en niet in Keiheuvel area (de area ligt 120 a 170 m over de CTR-lijn)
+function inForbid(x, y) { return pip(CTR, x, y) && !inside(x, y); }
+function ctrDist(x, y) {
+  let best = { d: 1e9 };
+  for (let i = 0; i < CTR.length; i++) { const c = segC(x, y, CTR[i], CTR[(i + 1) % CTR.length]); if (c.d < best.d) best = c; }
+  return best;
+}
 function segC(px, py, a, b) {
   const dx = b[0] - a[0], dy = b[1] - a[1];
   let t = ((px - a[0]) * dx + (py - a[1]) * dy) / (dx * dx + dy * dy);
@@ -197,9 +213,10 @@ function edges() {
   let hard = { d: 1e9, i: 0 }, soft = { d: 1e9, i: 0 };
   for (let i = 0; i < 5; i++) {
     const c = segC(G.x, G.y, P[i], P[(i + 1) % 5]); c.i = i;
-    if (HARD[i] && c.d < hard.d) hard = c;
+    if (HARD[i] && c.d < hard.d && inside(G.x, G.y)) hard = c;
     if (!HARD[i] && c.d < soft.d) soft = c;
   }
+  if (!inside(G.x, G.y)) { hard = ctrDist(G.x, G.y); hard.i = 1; }
   return { hard, soft };
 }
 function toLocal(lat, lon) { return [(lon - F[1]) * KX, (lat - F[0]) * KY]; }
@@ -432,7 +449,9 @@ function drawMap(lv) {
   const high = G.h != null && G.h >= S.tma;
   g.fillStyle = C.bg; g.fillRect(0, 0, w, h);
   g.beginPath(); g.rect(0, 0, w, h); poly(P); g.fillStyle = high ? 'rgba(239,68,68,0.22)' : 'rgba(245,158,11,0.10)'; g.fill('evenodd');
-  g.beginPath(); poly(FORBID); g.fillStyle = 'rgba(239,68,68,0.30)'; g.fill();
+  g.save(); g.beginPath(); g.rect(0, 0, w, h); poly(P); g.clip('evenodd');
+  g.beginPath(); poly(CTR); g.fillStyle = 'rgba(239,68,68,0.30)'; g.fill(); g.strokeStyle = C.red; g.lineWidth = 5; g.stroke();
+  g.restore();
   const fc = S2(0, 0);
   g.strokeStyle = C.grid; g.lineWidth = 1;
   for (let r = 2; r <= 16; r += 2) { g.beginPath(); g.arc(fc[0], fc[1], r * s, 0, 7); g.stroke(); }
@@ -441,10 +460,15 @@ function drawMap(lv) {
     for (let a = 0; a <= 360; a += 3) { const b = a * Math.PI / 180, r = reach(hh, b), q = S2(Math.sin(b) * r, Math.cos(b) * r); a ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }
     g.closePath();
   }
-  g.save(); g.beginPath(); if (high) poly(P); else { g.rect(0, 0, w, h); poly(FORBID); } g.clip('evenodd');
-  cone(S.mx); g.setLineDash([8, 6]); g.strokeStyle = C.grn; g.lineWidth = 2; g.stroke(); g.setLineDash([]);
-  if (G.h != null && G.h > S.ar) { cone(G.h); g.fillStyle = 'rgba(34,197,94,0.30)'; g.fill(); g.strokeStyle = C.grn; g.lineWidth = 3; g.stroke(); }
-  g.restore();
+  const cones = () => {
+    cone(S.mx); g.setLineDash([8, 6]); g.strokeStyle = C.grn; g.lineWidth = 2; g.stroke(); g.setLineDash([]);
+    if (G.h != null && G.h > S.ar) { cone(G.h); g.fillStyle = 'rgba(34,197,94,0.30)'; g.fill(); g.strokeStyle = C.grn; g.lineWidth = 3; g.stroke(); }
+  };
+  if (high) { g.save(); g.beginPath(); poly(P); g.clip(); cones(); g.restore(); }
+  else {
+    g.save(); g.beginPath(); g.rect(0, 0, w, h); poly(CTR); g.clip('evenodd'); cones(); g.restore();      // buiten de CTR
+    g.save(); g.beginPath(); poly(P); g.clip(); g.beginPath(); poly(CTR); g.clip(); cones(); g.restore(); // stukje area dat over de CTR-lijn ligt
+  }
   if (S.hm > 0) {
     g.setLineDash([6, 6]); g.strokeStyle = C.amb; g.lineWidth = 2;
     for (let i = 0; i < 5; i++) {
@@ -465,7 +489,7 @@ function drawMap(lv) {
     if (HARD[i]) { g.strokeStyle = C.red; g.lineWidth = 5; } else { g.setLineDash([5, 7]); g.strokeStyle = high ? C.red : C.mut; g.lineWidth = 2.5; }
     g.stroke(); g.setLineDash([]);
     const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
-    if (mx > -50 && mx < w + 50 && my > -20 && my < h + 20) { g.fillStyle = HARD[i] || high ? C.redT : C.mut; g.font = '600 14px system-ui,sans-serif'; g.textAlign = 'center'; g.fillText(lbl(i), mx, my - 9); }
+    if (!HARD[i] && mx > -50 && mx < w + 50 && my > -20 && my < h + 20) { g.fillStyle = HARD[i] || high ? C.redT : C.mut; g.font = '600 14px system-ui,sans-serif'; g.textAlign = 'center'; g.fillText(lbl(i), mx, my - 9); }
   }
   const e = edges();
   if (e.hard.d < 2) {
