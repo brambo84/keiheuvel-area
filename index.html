@@ -101,7 +101,7 @@ input[type=checkbox]{width:26px;height:26px}
     <button id="bZero">Hoogte hier op 0 zetten</button>
   </div>
   <div id="lastLog"></div>
-  <p class="sub" style="margin-top:24px">Versie 4 · testversie, niet gecertificeerd</p>
+  <p class="sub" style="margin-top:24px">Versie 5 · testversie, niet gecertificeerd</p>
 </section>
 
 <!-- ============ controle ============ -->
@@ -131,6 +131,12 @@ input[type=checkbox]{width:26px;height:26px}
       <canvas id="prof" aria-label="Zijaanzicht naar het veld"></canvas>
     </div>
   </div>
+  <div class="fbar" id="demoBar" hidden>
+    <button id="bDp">Pauze</button>
+    <button id="bDdn" aria-label="Lager">−50 m</button>
+    <button id="bDup" aria-label="Hoger">+50 m</button>
+    <button id="bDhelp" style="grid-column:span 2;font-weight:500;font-size:13px">Pauze en tik op de kaart om te verplaatsen</button>
+  </div>
   <div class="fbar">
     <button id="bOri">Koers boven</button>
     <button id="bZm" aria-label="Uitzoomen">−</button>
@@ -143,7 +149,7 @@ input[type=checkbox]{width:26px;height:26px}
 <script>
 'use strict';
 /* ---------- vaste gegevens ---------- */
-const VERSION = 4;
+const VERSION = 5;
 const F = [51.180833, 5.220833];                 // EBKH ARP (AIP)
 const KX = 111.32 * Math.cos(F[0] * Math.PI / 180), KY = 111.13;
 const LL = [[51.187333, 5.137778], [51.141333, 5.224444], [51.19, 5.316667], [51.261944, 5.316667], [51.263333, 5.28]];
@@ -257,7 +263,7 @@ let gps = { ok: false, acc: null, alt: null, lat: null, lon: null, gs: 0, t: 0, 
 let altBuf = [], ref = null, refInfo = '';
 let flying = false, demo = null, inFlightSet = false;
 let trackUp = true, zoom = 8, trail = [], log = [], lastLogT = 0;
-let level = '', lastAlarm = 0, actx = null, wakeLock = null;
+let VIEW = null, level = '', lastAlarm = 0, actx = null, wakeLock = null;
 
 /* ---------- formulier ---------- */
 function fillForm() {
@@ -444,6 +450,7 @@ function drawMap(lv) {
   const [w, h, g] = fit($('map'));
   const m = trackUp ? H : 0, cm = Math.cos(m), sm = Math.sin(m), s = Math.min(w, h * 1.2) / zoom, cx = w / 2, cy = trackUp ? h * 0.64 : h / 2;
   const S2 = (x, y) => { const dx = x - G.x, dy = y - G.y; return [cx + (dx * cm - dy * sm) * s, cy - (dx * sm + dy * cm) * s]; };
+  VIEW = { cx, cy, s, cm, sm };
   const dir = a => [Math.sin(a - m), -Math.cos(a - m)];
   const poly = Q => { Q.forEach((p, i) => { const q = S2(p[0], p[1]); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.closePath(); };
   const high = G.h != null && G.h >= S.tma;
@@ -530,21 +537,28 @@ function drawProf(lv) {
   const [w, h, g] = fit($('prof'));
   g.fillStyle = '#0a0a0a'; g.fillRect(0, 0, w, h);
   if (G.h == null) return;
-  const d = Math.hypot(G.x, G.y), dm = Math.max(4, d * 1.3), hm = Math.max(S.mx, G.h) + 100, L = 44, R = w - 10, Tp = 8, B = h - 18;
+  const d = Math.hypot(G.x, G.y), dm = Math.max(4, d * 1.3, d + 2.5), hm = Math.max(S.mx, G.h) + 100, L = 44, R = w - 10, Tp = 8, B = h - 18;
   const X = v => L + v / dm * (R - L), Y = v => B - v / hm * (B - Tp);
-  g.fillStyle = 'rgba(239,68,68,0.22)'; g.fillRect(L, Tp, R - L, Y(S.mx) - Tp);
   const bx = d > 0.01 ? G.x / d : 0, by = d > 0.01 ? G.y / d : 1, v = vg(-bx, -by), k = v > 0.5 ? (S.va / 3.6) / (S.ld * v) * 1000 : Infinity;
+  // toegelaten plafond langs de lijn veld -> zwever -> verder: area = max. hoogte Brogel, buiten = TMA, CTR = 0
+  const N = 240, ceil = [];
+  for (let i = 0; i <= N; i++) {
+    const tt = dm * i / N, x = bx * tt, y = by * tt;
+    ceil.push(inForbid(x, y) ? 0 : inside(x, y) ? S.mx : Math.min(S.mx, S.tma));
+  }
+  const ceilPath = off => { g.beginPath(); for (let i = 0; i <= N; i++) { const xx = X(dm * i / N), yy = Y(Math.max(0, ceil[i] - off)); if (i) { g.lineTo(xx, Y(Math.max(0, ceil[i - 1] - off))); g.lineTo(xx, yy); } else g.moveTo(xx, yy); } };
   if (isFinite(k)) {
     const dx = Math.min(dm, (S.mx - S.ar) / k);
     g.beginPath(); g.moveTo(X(0), Y(S.ar)); g.lineTo(X(dx), Y(S.ar + dx * k)); g.lineTo(X(dx), Y(S.mx)); g.lineTo(X(0), Y(S.mx)); g.closePath(); g.fillStyle = 'rgba(34,197,94,0.30)'; g.fill();
     g.strokeStyle = C.grn; g.lineWidth = 2; g.beginPath(); g.moveTo(X(0), Y(S.ar)); g.lineTo(X(dm), Y(Math.min(hm, S.ar + dm * k))); g.stroke();
   }
-  if (S.vm > 0) { g.setLineDash([5, 5]); g.strokeStyle = C.amb; g.lineWidth = 1.5; g.beginPath(); g.moveTo(L, Y(S.mx - S.vm)); g.lineTo(R, Y(S.mx - S.vm)); g.stroke(); g.setLineDash([]); }
-  g.strokeStyle = C.red; g.lineWidth = 2; g.beginPath(); g.moveTo(L, Y(S.mx)); g.lineTo(R, Y(S.mx)); g.stroke();
-  if (!inside(G.x, G.y) && S.tma < S.mx) { g.setLineDash([8, 4]); g.strokeStyle = C.red; g.lineWidth = 2; g.beginPath(); g.moveTo(L, Y(S.tma)); g.lineTo(R, Y(S.tma)); g.stroke(); g.setLineDash([]); g.fillStyle = C.redT; g.font = '600 11px system-ui,sans-serif'; g.textAlign = 'right'; g.fillText('TMA ' + S.tma, R - 2, Y(S.tma) - 4); }
+  ceilPath(0); g.lineTo(X(dm), Tp); g.lineTo(X(0), Tp); g.closePath(); g.fillStyle = 'rgba(239,68,68,0.45)'; g.fill();
+  if (S.vm > 0) { ceilPath(S.vm); g.setLineDash([5, 5]); g.strokeStyle = C.amb; g.lineWidth = 1.5; g.stroke(); g.setLineDash([]); }
+  ceilPath(0); g.strokeStyle = C.red; g.lineWidth = 2.5; g.stroke();
   g.strokeStyle = C.mut; g.lineWidth = 1; g.beginPath(); g.moveTo(L, Tp); g.lineTo(L, B); g.lineTo(R, B); g.stroke();
   g.fillStyle = C.mut; g.font = '600 11px system-ui,sans-serif'; g.textAlign = 'right';
-  [0, S.ar, S.mx].forEach(t => g.fillText(Math.round(t), L - 4, Y(t) + 4));
+  const ticks = [0, S.ar, S.mx]; if (S.tma < S.mx - 60 && ceil.some(c => c === S.tma)) ticks.push(S.tma);
+  ticks.forEach(t => g.fillText(Math.round(t), L - 4, Y(t) + 4));
   g.textAlign = 'center'; const stp = dm > 12 ? 4 : dm > 6 ? 2 : 1;
   for (let t = 0; t <= dm; t += stp) g.fillText(t + ' km', X(t), B + 13);
   g.fillStyle = colOf(lv); g.beginPath(); g.arc(X(d), Y(G.h), 7, 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
@@ -562,8 +576,10 @@ function startFlight(isDemo) {
   unlockAudio(); requestWake();
   flying = true; level = ''; trail = []; log = []; lastLogT = 0;
   if (isDemo) {
-    demo = { t: 0, spd: 10, timer: null };
+    demo = { t: 0, spd: 10, timer: null, paused: false };
+    $('demoBar').hidden = false; $('bDp').textContent = 'Pauze';
     demo.timer = setInterval(() => {
+      if (demo.paused) return;
       demo.t += 0.25 * demo.spd;
       if (demo.t > TR[TR.length - 1][0]) { stopFlight(); return; }
       const p = posAt(demo.t);
@@ -576,6 +592,7 @@ function startFlight(isDemo) {
   show('vFly');
 }
 function stopFlight() {
+  $('demoBar').hidden = true;
   if (demo) { clearInterval(demo.timer); demo = null; }
   else if (log.length > 1) {
     try { localStorage.setItem('kha_log', JSON.stringify({ date: new Date().toISOString(), pts: log })); } catch (e) {}
@@ -635,6 +652,21 @@ let stopArmed = false;
 $('bStop').addEventListener('click', () => {
   if (!stopArmed) { stopArmed = true; $('bStop').textContent = 'Zeker?'; setTimeout(() => { stopArmed = false; $('bStop').textContent = 'Stop'; }, 3000); return; }
   stopArmed = false; $('bStop').textContent = 'Stop'; stopFlight();
+});
+
+/* ---------- demo: zelf verplaatsen ---------- */
+function pauseDemo(on) { if (!demo) return; demo.paused = on; $('bDp').textContent = on ? 'Verder' : 'Pauze'; }
+$('bDp').addEventListener('click', () => pauseDemo(!demo.paused));
+$('bDdn').addEventListener('click', () => { pauseDemo(true); if (G.h != null) G.h = Math.max(0, G.h - 50); draw(); });
+$('bDup').addEventListener('click', () => { pauseDemo(true); if (G.h != null) G.h = G.h + 50; draw(); });
+$('map').addEventListener('pointerdown', ev => {
+  if (!demo || !VIEW) return;
+  pauseDemo(true);
+  const r = $('map').getBoundingClientRect(), u = (ev.clientX - r.left - VIEW.cx) / VIEW.s, v = -(ev.clientY - r.top - VIEW.cy) / VIEW.s;
+  const nx = G.x + u * VIEW.cm + v * VIEW.sm, ny = G.y - u * VIEW.sm + v * VIEW.cm;
+  if (Math.hypot(nx - G.x, ny - G.y) > 0.02) H = Math.atan2(nx - G.x, ny - G.y);
+  G = { x: nx, y: ny, h: G.h, gs: 25 }; trail.push({ x: nx, y: ny, t: demo.t });
+  checkAlarm(); draw();
 });
 
 /* ---------- start ---------- */
