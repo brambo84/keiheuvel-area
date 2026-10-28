@@ -79,7 +79,7 @@ input[type=checkbox]{width:26px;height:26px}
 
   <h2>Veld</h2>
   <label class="row"><span>Aankomsthoogte (m)<small>Hoogte boven het veld bij aankomst</small></span><input type="number" id="s_ar" inputmode="numeric" min="50" max="400" step="10"></label>
-  <label class="row"><span>TMA buiten de area (m)<small>Boven het veld. 2500 ft AMSL = 725 m. Geldt buiten de zuidwest-, noordwest- en NL-zijde</small></span><input type="number" id="s_tma" inputmode="numeric" min="100" max="2000" step="5"></label>
+  <label class="row"><span>TMA buiten de area (m)<small>Boven het veld. 2500 ft AMSL = 725 m. Geldt buiten alle zijden behalve de zuidoostzijde</small></span><input type="number" id="s_tma" inputmode="numeric" min="100" max="2000" step="5"></label>
 
   <h2>Veiligheidsmarges</h2>
   <p class="sub">Binnen deze marge wordt het scherm oranje. Op de grens zelf volgt het alarm.</p>
@@ -101,7 +101,7 @@ input[type=checkbox]{width:26px;height:26px}
     <button id="bZero">Hoogte hier op 0 zetten</button>
   </div>
   <div id="lastLog"></div>
-  <p class="sub" style="margin-top:24px">Versie 2 · testversie, niet gecertificeerd</p>
+  <p class="sub" style="margin-top:24px">Versie 3 · testversie, niet gecertificeerd</p>
 </section>
 
 <!-- ============ controle ============ -->
@@ -125,7 +125,7 @@ input[type=checkbox]{width:26px;height:26px}
       <div class="tiles">
         <div class="tile"><span>Hoogte</span><b id="tH">--</b></div>
         <div class="tile"><span>Kegel-reserve</span><b id="tR">--</b></div>
-        <div class="tile"><span id="tBl">Tot TMA-grens</span><b id="tB">--</b></div>
+        <div class="tile"><span id="tBl">Tot CTR</span><b id="tB">--</b></div>
         <div class="tile"><span id="tDl">Veld</span><b id="tD">--</b></div>
       </div>
       <canvas id="prof" aria-label="Zijaanzicht naar het veld"></canvas>
@@ -143,14 +143,14 @@ input[type=checkbox]{width:26px;height:26px}
 <script>
 'use strict';
 /* ---------- vaste gegevens ---------- */
-const VERSION = 2;
+const VERSION = 3;
 const F = [51.180833, 5.220833];                 // EBKH ARP (AIP)
 const KX = 111.32 * Math.cos(F[0] * Math.PI / 180), KY = 111.13;
 const LL = [[51.187333, 5.137778], [51.141333, 5.224444], [51.19, 5.316667], [51.261944, 5.316667], [51.263333, 5.28]];
 const P = LL.map(p => [(p[1] - F[1]) * KX, (p[0] - F[0]) * KY]);
-const HARD = [false, true, true, false, false];   // zuidwest, zuidoost, oost, NL-grens, noordwest
+const HARD = [false, true, false, false, false];   // zuidwest, zuidoost, oost, NL-grens, noordwest
 const SIDE = ['zuidwest', 'zuidoost', 'oost', 'NL-grens', 'noordwest'];
-function lbl(i) { return HARD[i] ? 'TMA' : 'buiten: onder ' + S.tma + ' m'; }
+function lbl(i) { return HARD[i] ? 'CTR Brogel' : 'buiten: onder ' + S.tma + ' m'; }
 const RWY = 0.69, RHD = 67 * Math.PI / 180;
 const ALT_FALLBACK = 82;                         // 37 m veldhoogte + 45 m geoïde (AIP: 148 ft)
 const ZL = [2, 4, 8, 16, 25];
@@ -180,10 +180,10 @@ const NIN = P.map((a, i) => {
   if (!inside(mx + n[0] * 0.05, my + n[1] * 0.05)) n = [-n[0], -n[1]];
   return n;
 });
-// verboden gebied achter de harde zijden (zuidoost en oost)
+// verboden gebied achter de harde zijde (zuidoost, CTR Kleine Brogel)
 const FORBID = (() => {
-  const o1 = [-NIN[1][0] * 40, -NIN[1][1] * 40], o2 = [-NIN[2][0] * 40, -NIN[2][1] * 40];
-  return [P[1], P[2], P[3], [P[3][0] + o2[0], P[3][1] + o2[1]], [P[2][0] + o1[0] + o2[0], P[2][1] + o1[1] + o2[1]], [P[1][0] + o1[0], P[1][1] + o1[1]]];
+  const o1 = [-NIN[1][0] * 40, -NIN[1][1] * 40];
+  return [P[1], P[2], [P[2][0] + o1[0], P[2][1] + o1[1]], [P[1][0] + o1[0], P[1][1] + o1[1]]];
 })();
 function inForbid(x, y) { return pip(FORBID, x, y); }
 function segC(px, py, a, b) {
@@ -359,17 +359,17 @@ function feed(x, y, h, hd, t, gs) {
 function status() {
   if (!demo && (!gps.ok || performance.now() - gps.t > 5000)) return ['GEEN GPS', 'danger'];
   const d = Math.hypot(G.x, G.y), e = edges(), ins = inside(G.x, G.y), forb = inForbid(G.x, G.y);
-  if (G.h == null) return forb ? ['BUITEN AREA: TMA BROGEL', 'danger'] : ['Geen GPS-hoogte', 'warning'];
+  if (G.h == null) return forb ? ['BUITEN AREA: CTR BROGEL', 'danger'] : ['Geen GPS-hoogte', 'warning'];
   const r = hReq(G.x, G.y), res = G.h - r;
   if (G.h < 15 && d < 1) return ['Op het veld', 'info'];
   if (G.h >= S.mx) return ['HOOGTEGRENS: DAAL ONDER ' + S.mx + ' m', 'danger'];
-  if (forb) return ['BUITEN AREA: TMA BROGEL', 'danger'];
+  if (forb) return ['BUITEN AREA: CTR BROGEL', 'danger'];
   if (!ins && G.h >= S.tma) return ['BOVEN TMA: DAAL ONDER ' + S.tma + ' m', 'danger'];
   if (d < 1.5 && G.h < S.ar + 30) return ['Circuit en landing', 'info'];
   if (res < 0) return ['BUITEN KEGEL: VLIEG NAAR HET VELD', 'danger'];
   if (S.mx - G.h < S.vm) return ['Nadert hoogtegrens: nog ' + Math.round(S.mx - G.h) + ' m', 'warning'];
   if (!ins && S.tma - G.h < S.vm) return ['Nadert TMA buiten area: nog ' + Math.round(S.tma - G.h) + ' m', 'warning'];
-  if (ins && e.hard.d * 1000 < S.hm) return ['Nadert TMA ' + SIDE[e.hard.i] + ': nog ' + dist(e.hard.d), 'warning'];
+  if (ins && e.hard.d * 1000 < S.hm) return ['Nadert CTR Brogel: nog ' + dist(e.hard.d), 'warning'];
   if (ins && G.h > S.tma - S.vm && e.soft.d * 1000 < S.hm) return ['Te hoog om de area te verlaten (max ' + S.tma + ' m)', 'warning'];
   if (res < S.cm) return ['Krap in de kegel: nog ' + Math.round(res) + ' m', 'warning'];
   if (!ins) return ['Buiten area, onder de TMA', 'ok'];
@@ -410,7 +410,7 @@ function draw() {
   const e = edges(), d = Math.hypot(G.x, G.y), r = G.h == null ? NaN : hReq(G.x, G.y);
   $('tH').textContent = G.h == null ? '--' : Math.round(G.h) + ' m';
   $('tR').textContent = isFinite(r) ? ((G.h - r >= 0 ? '+' : '') + Math.round(G.h - r) + ' m') : '--';
-  if (inside(G.x, G.y)) { $('tBl').textContent = 'Tot TMA-grens'; $('tB').textContent = dist(e.hard.d); }
+  if (inside(G.x, G.y)) { $('tBl').textContent = 'Tot CTR'; $('tB').textContent = dist(e.hard.d); }
   else { $('tBl').textContent = 'Terug in area'; $('tB').textContent = dist(e.soft.d); }
   const brg = (Math.round(Math.atan2(-G.x, -G.y) * 180 / Math.PI) + 360) % 360;
   $('tD').textContent = dist(d); $('tDl').textContent = 'Veld ' + String(brg).padStart(3, '0') + '°';
